@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - WhatsApp Broadcast</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .container { width: 100%; max-width: 800px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    .header h1 { font-size: 22px; }
+    .header h1 span { color: #00ff88; }
+    .logout { background: #ff4444; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; }
+    .card { background: #1a1a2e; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #2a2a4a; }
+    .card h3 { color: #00ff88; margin-bottom: 16px; font-size: 16px; }
+    .status-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #0f0f23; border-radius: 8px; margin-bottom: 16px; }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .status-dot.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+    .status-dot.disconnected { background: #ff4444; }
+    .status-dot.qr_ready { background: #ffaa00; animation: pulse 1s infinite; }
+    .status-dot.initializing { background: #888; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    button { padding: 10px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+    button:hover { transform: translateY(-1px); }
+    .btn-primary { background: #00ff88; color: #000; width: 100%; padding: 14px; font-size: 16px; }
+    .btn-primary:disabled { background: #335544; cursor: not-allowed; transform: none; }
+    .btn-connect { background: #0066ff; color: #fff; }
+    .btn-disconnect { background: #ff4444; color: #fff; }
+    .btn-stop { background: #ff8800; color: #000; }
+    .btn-secondary { background: #333; color: #fff; }
+    .target-msg { background: #0f0f23; padding: 16px; border-radius: 8px; border-left: 3px solid #00ff88; margin-bottom: 16px; font-size: 14px; line-height: 1.6; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 16px 0; }
+    .stat-box { background: #0f0f23; padding: 16px; border-radius: 8px; text-align: center; }
+    .stat-box .num { font-size: 28px; font-weight: 700; color: #00ff88; }
+    .stat-box .label { font-size: 12px; color: #888; margin-top: 4px; }
+    .progress-bar { width: 100%; height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin: 12px 0; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #00cc6a); transition: width 0.3s; border-radius: 4px; }
+    .log-area { max-height: 300px; overflow-y: auto; background: #0f0f23; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 12px; }
+    .log-area .entry { padding: 4px 0; border-bottom: 1px solid #1a1a2e; }
+    .log-area .entry.success { color: #00ff88; }
+    .log-area .entry.fail { color: #ff4444; }
+    .log-area .entry.info { color: #888; }
+    .hidden { display: none; }
+    .qr-section { text-align: center; padding: 20px; }
+    .qr-section img { width: 220px; height: 220px; border-radius: 12px; background: #fff; padding: 8px; }
+    .qr-section p { color: #888; margin-top: 12px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #222; font-size: 13px; }
+    th { color: #00ff88; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📡 <span id="userName">User</span></h1>
+      <button class="logout" onclick="logout()">🚪 Logout</button>
+    </div>
+
+    <!-- WhatsApp Connection -->
+    <div class="card">
+      <h3>📱 WhatsApp Connection</h3>
+      <div class="status-bar">
+        <div class="status-dot disconnected" id="statusDot"></div>
+        <span id="statusText">Checking...</span>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn-connect" id="connectBtn" onclick="connect()">🔗 Connect</button>
+          <button class="btn-disconnect hidden" id="disconnectBtn" onclick="disconnect()">🔌 Disconnect</button>
+        </div>
+      </div>
+      <div id="qrSection" class="qr-section hidden">
+        <img id="qrImage" src="" alt="QR Code">
+        <p>📱 Scan this QR code with WhatsApp on your phone</p>
+      </div>
+    </div>
+
+    <!-- Target Message -->
+    <div class="card">
+      <h3>📝 Message to Broadcast</h3>
+      <div id="targetMsg" class="target-msg">Loading...</div>
+    </div>
+
+    <!-- Broadcast Controls -->
+    <div class="card">
+      <h3>📤 Start Broadcasting</h3>
+      <p style="color:#888;margin-bottom:12px;font-size:13px;">Sends message to all numbers in <code>numbers.txt</code></p>
+      
+      <div class="stats">
+        <div class="stat-box">
+          <div class="num" id="statTotal">0</div>
+          <div class="label">Total Numbers</div>
+        </div>
+        <div class="stat-box">
+          <div class="num" id="statDone" style="color:#00ff88;">0</div>
+          <div class="label">✅ Sent</div>
+        </div>
+        <div class="stat-box">
+          <div class="num" id="statFail" style="color:#ff4444;">0</div>
+          <div class="label">❌ Failed</div>
+        </div>
+      </div>
+
+      <div id="progressSection" class="hidden">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width:0%"></div>
+        </div>
+        <p style="text-align:center;font-size:13px;color:#888;" id="progressText">0 / 0</p>
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <button class="btn-primary" id="startBtn" onclick="startBroadcast()">🚀 Start Broadcast</button>
+        <button class="btn-stop hidden" id="stopBtn" onclick="stopBroadcast()">⏹ Stop</button>
+      </div>
+    </div>
+
+    <!-- Live Log / History -->
+    <div class="card">
+      <h3>📜 Broadcast Log</h3>
+      <div id="liveLog" class="log-area">
+        <div class="entry info">Ready to broadcast...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📊 History</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Total</th><th>✅</th><th>❌</th></tr></thead>
+        <tbody id="historyTable"><tr><td colspan="4" style="text-align:center;color:#888;">No history</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    if (!token || localStorage.getItem('role') !== 'user') window.location.href = '/login.html';
+
+    document.getElementById('userName').textContent = localStorage.getItem('name') || 'User';
+
+    // Socket.IO
+    const socket = io({ auth: { token } });
+
+    // ====== SOCKET EVENTS ======
+    socket.on('qr_code', (data) => {
+      document.getElementById('qrImage').src = data.qr;
+      document.getElementById('qrSection').classList.remove('hidden');
+      updateStatus('qr_ready', 'Scan QR code with WhatsApp');
+    });
+
+    socket.on('whatsapp_status', (data) => {
+      if (data.status === 'connected') {
+        document.getElementById('qrSection').classList.add('hidden');
+        updateStatus('connected', '✅ WhatsApp Connected');
+        document.getElementById('connectBtn').classList.add('hidden');
+        document.getElementById('disconnectBtn').classList.remove('hidden');
+      } else if (data.status === 'disconnected') {
+        updateStatus('disconnected', '❌ Disconnected');
+        document.getElementById('connectBtn').classList.remove('hidden');
+        document.getElementById('disconnectBtn').classList.add('hidden');
+      }
+    });
+
+    socket.on('broadcast_progress', (data) => {
+      document.getElementById('statTotal').textContent = data.total;
+      document.getElementById('statDone').textContent = data.success;
+      document.getElementById('statFail').textContent = data.fail;
+      const pct = data.total > 0 ? Math.round(((data.success + data.fail) / data.total) * 100) : 0;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressText').textContent = `${data.done} / ${data.total}`;
+      addLog(`${data.current}. ✅ ${data.success} | ❌ ${data.fail}`, data.fail > 0 ? 'fail' : 'success');
+    });
+
+    socket.on('broadcast_complete', (data) => {
+      document.getElementById('progressSection').classList.add('hidden');
+      document.getElementById('startBtn').classList.remove('hidden');
+      document.getElementById('stopBtn').classList.add('hidden');
+      document.getElementById('startBtn').disabled = false;
+      addLog(`✅ COMPLETE! Sent: ${data.success}, Failed: ${data.fail}`, 'success');
+      loadHistory();
+    });
+
+    // ====== FUNCTIONS ======
+    function updateStatus(status, text) {
+      const dot = document.getElementById('statusDot');
+      dot.className = 'status-dot ' + status;
+      document.getElementById('statusText').textContent = text;
+    }
+
+    function addLog(msg, type = 'info') {
+      const log = document.getElementById('liveLog');
+      const entry = document.createElement('div');
+      entry.className = 'entry ' + type;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    async function api(path, method = 'GET', body = null) {
+      const opts = { method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      return res.json();
+    }
+
+    async function loadStatus() {
+      const data = await api('/api/user/status');
+      if (data.status === 'connected') {
+        updateStatus('connected', '✅ WhatsApp Connected');
+        document.getElementById('connectBtn').classList.add('hidden');
+        document.getElementById('disconnectBtn').classList.remove('hidden');
+      } else if (data.status === 'disconnected') {
+        updateStatus('disconnected', '❌ Disconnected');
+        document.getElementById('connectBtn').classList.remove('hidden');
+        document.getElementById('disconnectBtn').classList.add('hidden');
+      }
+    }
+
+    async function connect() {
+      document.getElementById('connectBtn').disabled = true;
+      document.getElementById('connectBtn').textContent = 'Connecting...';
+      await api('/api/user/connect', 'POST');
+      addLog('🔄 Initializing WhatsApp connection...', 'info');
+      setTimeout(() => { document.getElementById('connectBtn').disabled = false; document.getElementById('connectBtn').textContent = '🔗 Connect'; }, 2000);
+    }
+
+    async function disconnect() {
+      await api('/api/user/disconnect', 'POST');
+      updateStatus('disconnected', '❌ Disconnected');
+      document.getElementById('connectBtn').classList.remove('hidden');
+      document.getElementById('disconnectBtn').classList.add('hidden');
+      addLog('🔌 Disconnected from WhatsApp', 'info');
+    }
+
+    async function loadTargetMessage() {
+      const data = await api('/api/user/target-message');
+      document.getElementById('targetMsg').textContent = data.targetMessage || 'No message set by admin yet.';
+      if (data.targetMessage) addLog('📝 Target message loaded');
+    }
+
+    async function startBroadcast() {
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('startBtn').textContent = '⏳ Broadcasting...';
+      document.getElementById('progressSection').classList.remove('hidden');
+      document.getElementById('stopBtn').classList.remove('hidden');
+      document.getElementById('statTotal').textContent = '0';
+      document.getElementById('statDone').textContent = '0';
+      document.getElementById('statFail').textContent = '0';
+      document.getElementById('progressFill').style.width = '0%';
+      document.getElementById('progressText').textContent = '0 / 0';
+      
+      const data = await api('/api/user/start-broadcast', 'POST');
+      
+      if (data.error) {
+        addLog(`❌ ${data.error}`, 'fail');
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').textContent = '🚀 Start Broadcast';
+        document.getElementById('progressSection').classList.add('hidden');
+        document.getElementById('stopBtn').classList.add('hidden');
+      }
+    }
+
+    async function stopBroadcast() {
+      await api('/api/user/stop-broadcast', 'POST');
+      addLog('⏹ Broadcast stopped by user', 'info');
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('startBtn').textContent = '🚀 Start Broadcast';
+      document.getElementById('stopBtn').classList.add('hidden');
+    }
+
+    async function loadHistory() {
+      const data = await api('/api/user/history');
+      const tbody = document.getElementById('historyTable');
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">No history</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(h => `
+        <tr>
+          <td>${h.createdAt ? new Date(h.createdAt).toLocaleString() : '-'}</td>
+          <td>${h.totalNumbers || 0}</td>
+          <td style="color:#00ff88;">${h.successCount || 0}</td>
+          <td style="color:#ff4444;">${h.failCount || 0}</td>
+        </tr>
+      `).join('');
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = '/login.html';
+    }
+
+    // Init
+    loadStatus();
+    loadTargetMessage();
+    loadHistory();
+  </script>
+</body>
+</html>
