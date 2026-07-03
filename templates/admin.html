@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - WhatsApp Spreader</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body { background: #0d1117; color: #c9d1d9; }
+        .card { background: #161b22; border: 1px solid #30363d; }
+        .table { color: #c9d1d9; }
+        .table th { border-color: #30363d; }
+        .table td { border-color: #21262d; }
+        .form-control, .form-select { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; }
+        .form-control:focus { background: #0d1117; border-color: #58a6ff; color: #c9d1d9; }
+        .btn-success { background: #238636; border: none; }
+        .btn-success:hover { background: #2ea043; }
+        .btn-danger { background: #da3633; border: none; }
+        .stat-card { background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+        .key-display { font-family: monospace; background: #0d1117; padding: 8px 12px; border-radius: 4px; border: 1px solid #30363d; }
+        .brand { color: #25D366; }
+        .nav-link { color: #8b949e; }
+        .nav-link.active { color: #25D366 !important; border-color: #25D366 !important; }
+        textarea.form-control { min-height: 120px; }
+        .badge-green { background: #238636; }
+        .badge-red { background: #da3633; }
+        .badge-yellow { background: #d29922; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark border-bottom border-secondary px-3">
+        <span class="navbar-brand brand">💬 Admin Panel</span>
+        <div>
+            <span class="text-secondary me-3">Welcome, {{ session.username }}</span>
+            <a href="/admin/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+        </div>
+    </nav>
+    
+    <div class="container-fluid mt-3">
+        <!-- Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <h5 class="text-secondary">Total Keys</h5>
+                    <h2 class="brand">{{ total_keys }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <h5 class="text-secondary">Used Keys</h5>
+                    <h2 class="text-warning">{{ used_keys }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <h5 class="text-secondary">Connected Users</h5>
+                    <h2 class="text-info">{{ total_clients }}</h2>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <h5 class="text-secondary">Broadcasts</h5>
+                    <h2 class="text-primary">{{ total_broadcasts }}</h2>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- Left: Key Management + Message -->
+            <div class="col-md-5">
+                <!-- Generate Key -->
+                <div class="card mb-3 p-3">
+                    <h5><i class="bi bi-key-fill"></i> Generate Login Key</h5>
+                    <button id="generateKeyBtn" class="btn btn-success mt-2">Generate New Key</button>
+                    <div id="newKeyDisplay" class="mt-3 key-display" style="display:none;"></div>
+                </div>
+                
+                <!-- Set Broadcast Message -->
+                <div class="card mb-3 p-3">
+                    <h5><i class="bi bi-chat-dots-fill"></i> Set Broadcast Message</h5>
+                    <form id="setMessageForm">
+                        <textarea name="message" class="form-control mt-2" placeholder="Enter the message all users will broadcast..." required></textarea>
+                        <button type="submit" class="btn btn-success mt-2 w-100">Update Message</button>
+                    </form>
+                    <div id="messageStatus" class="mt-2"></div>
+                </div>
+                
+                <!-- Login Keys Table -->
+                <div class="card p-3">
+                    <h5><i class="bi bi-list-columns"></i> Login Keys</h5>
+                    <div class="table-responsive" style="max-height:300px; overflow-y:auto;">
+                        <table class="table table-sm table-dark">
+                            <thead>
+                                <tr>
+                                    <th>Key</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for k in keys %}
+                                <tr>
+                                    <td><code>{{ k.key[:20] }}...</code></td>
+                                    <td>
+                                        {% if k.used %}
+                                        <span class="badge bg-secondary">Used</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="small">{{ k.created_at }}</td>
+                                    <td>
+                                        <button class="btn btn-danger btn-sm delete-key" data-id="{{ k._id }}">Del</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not keys %}
+                                <tr><td colspan="4" class="text-secondary">No keys generated yet</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right: Users + Broadcast History -->
+            <div class="col-md-7">
+                <!-- Connected Users -->
+                <div class="card mb-3 p-3">
+                    <h5><i class="bi bi-people-fill"></i> Connected Users</h5>
+                    <div class="table-responsive" style="max-height:250px; overflow-y:auto;">
+                        <table class="table table-sm table-dark">
+                            <thead>
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>WhatsApp</th>
+                                    <th>Sent</th>
+                                    <th>Failed</th>
+                                    <th>Last Broadcast</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in clients %}
+                                <tr>
+                                    <td><code>{{ c.user_id }}</code></td>
+                                    <td>{{ c.whatsapp_number or 'Not connected' }}</td>
+                                    <td>{{ c.total_sent }}</td>
+                                    <td>{{ c.total_failed }}</td>
+                                    <td class="small">{{ c.last_broadcast or 'Never' }}</td>
+                                </tr>
+                                {% endfor %}
+                                {% if not clients %}
+                                <tr><td colspan="5" class="text-secondary">No users connected yet</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Broadcast History -->
+                <div class="card p-3">
+                    <h5><i class="bi bi-clock-history"></i> Broadcast History</h5>
+                    <div class="table-responsive" style="max-height:350px; overflow-y:auto;">
+                        <table class="table table-sm table-dark">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Total</th>
+                                    <th>Done</th>
+                                    <th>Fail</th>
+                                    <th>Time</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for b in broadcasts %}
+                                <tr>
+                                    <td><code>{{ b.user_id[:8] }}..</code></td>
+                                    <td>{{ b.numbers_count }}</td>
+                                    <td class="text-success">{{ b.done }}</td>
+                                    <td class="text-danger">{{ b.fail }}</td>
+                                    <td class="small">{{ b.started_at }}</td>
+                                    <td><span class="badge bg-success">{{ b.status }}</span></td>
+                                </tr>
+                                {% endfor %}
+                                {% if not broadcasts %}
+                                <tr><td colspan="6" class="text-secondary">No broadcasts yet</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        // Generate Key
+        $("#generateKeyBtn").click(function() {
+            $.post("/admin/generate-key", function(data) {
+                if (data.success) {
+                    $("#newKeyDisplay").html(`
+                        ✅ New Key: <strong>${data.key}</strong>
+                        <button class="btn btn-sm btn-outline-info ms-2" onclick="navigator.clipboard.writeText('${data.key}')">Copy</button>
+                    `).show();
+                    location.reload();
+                }
+            });
+        });
+        
+        // Set Message
+        $("#setMessageForm").submit(function(e) {
+            e.preventDefault();
+            $.post("/admin/set-message", $(this).serialize(), function(data) {
+                if (data.success) {
+                    $("#messageStatus").html('<div class="alert alert-success py-1">✅ Message updated</div>');
+                }
+            });
+        });
+        
+        // Delete Key
+        $(".delete-key").click(function() {
+            if (confirm("Delete this key?")) {
+                $.post("/admin/delete-key/" + $(this).data("id"), function() {
+                    location.reload();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
