@@ -1,43 +1,72 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 import uuid
 import threading
 import time
-import pywhatkit as kit
-import pyautogui
-import keyboard
 import os
 import json
-from datetime import datetime
-from bson import ObjectId
 import random
 import string
+from datetime import datetime
+from bson import ObjectId
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24).hex()
 
-# ─── MongoDB Connection ─────────────────────────────────────────
-MONGO_URI = "mongodb+srv://nexacoders2_db_user:dxYh7QOdHvH6OVdd@cluster0.f4qxcbk.mongodb.net/?appName=Cluster0"
+# ─── Configuration ──────────────────────────────────────────────
+MONGO_URI = "mongodb://localhost:27017"
 client = MongoClient(MONGO_URI)
 db = client["whatsapp_spreader"]
-users_col = db["users"]          # Panel admin
-clients_col = db["clients"]      # Sub-users (connected accounts)
-keys_col = db["login_keys"]      # Generated login keys
-broadcast_col = db["broadcasts"] # Broadcast history
+users_col = db["users"]
+clients_col = db["clients"]
+keys_col = db["login_keys"]
+broadcast_col = db["broadcasts"]
+
+# ─── Global WebDriver pool (one per user) ──────────────────────
+user_drivers = {}  # {user_id: driver_instance}
 
 # ─── Helper Functions ───────────────────────────────────────────
 
 def generate_login_key():
-    """Generate a unique login key for sub-users"""
     return "WS-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
 
 def generate_user_id():
-    """Generate a unique user ID"""
     return str(uuid.uuid4())[:8]
 
 def get_current_time():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def create_driver(user_id):
+    """Create a Chrome driver with a persistent user profile for WhatsApp Web"""
+    profile_dir = os.path.join(os.getcwd(), "profiles", user_id)
+    os.makedirs(profile_dir, exist_ok=True)
+    
+    chrome_options = Options()
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument(f"--user-data-dir={profile_dir}")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
+    
+    # Try headless first; if it fails due to QR scan needed, user will be prompted
+    # chrome_options.add_argument("--headless=new")
+    
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.get("https://web.whatsapp.com")
+    return driver
 
 # ─── Routes ─────────────────────────────────────────────────────
 
@@ -89,7 +118,6 @@ def admin_dashboard():
     clients = list(clients_col.find().sort("created_at", -1))
     broadcasts = list(broadcast_col.find().sort("started_at", -1).limit(50))
     
-    # Stats
     total_keys = len(keys)
     used_keys = len([k for k in keys if k.get("used")])
     total_clients = len(clients)
@@ -116,7 +144,6 @@ def generate_key():
 
 @app.route("/admin/set-message", methods=["POST"])
 def set_message():
-    """Panel admin sets the target broadcast message"""
     if not session.get("admin"):
         return jsonify({"error": "Unauthorized"}), 401
     
@@ -124,7 +151,6 @@ def set_message():
     if not message:
         return jsonify({"error": "Message cannot be empty"}), 400
     
-    # Save as global broadcast message
     db.settings.update_one(
         {"key": "broadcast_message"},
         {"$set": {"value": message, "updated_by": session["username"], "updated_at": get_current_time()}},
@@ -159,13 +185,11 @@ def user_login():
         if key_doc.get("used"):
             return render_template("index.html", error="This key has already been used")
         
-        # Mark key as used and create client session
         user_id = generate_user_id()
         keys_col.update_one({"_id": key_doc["_id"]}, {
             "$set": {"used": True, "assigned_to": user_id, "used_at": get_current_time()}
         })
         
-        # Create client record
         clients_col.insert_one({
             "user_id": user_id,
             "login_key": login_key,
@@ -194,11 +218,9 @@ def user_dashboard():
     if not client:
         return redirect("/")
     
-    # Get broadcast message from admin
     settings = db.settings.find_one({"key": "broadcast_message"})
     broadcast_msg = settings["value"] if settings else "No message set by admin yet"
     
-    # Get user's broadcast history
     broadcasts = list(broadcast_col.find({"user_id": user_id}).sort("started_at", -1).limit(20))
     
     return render_template("dashboard.html", 
@@ -216,15 +238,29 @@ def connect_whatsapp():
         return jsonify({"error": "WhatsApp number required"}), 400
     
     user_id = session["user_id"]
-    clients_col.update_one({"user_id": user_id}, {
-        "$set": {
-            "whatsapp_number": whatsapp_number,
-            "whatsapp_connected": True,
-            "connected_at": get_current_time()
-        }
-    })
     
-    return jsonify({"success": True, "message": "WhatsApp connected successfully"})
+    # Launch Chrome for this user and open WhatsApp Web (QR scan needed)
+    try:
+        driver = create_driver(user_id)
+        # Wait up to 60 seconds for QR scan / login
+        WebDriverWait(driver, 60).until(
+            EC.presence_of_element_located((By.XPATH, "//div[@data-testid='conversation-panel-wrapper']"))
+        )
+        user_drivers[user_id] = driver
+        
+        clients_col.update_one({"user_id": user_id}, {
+            "$set": {
+                "whatsapp_number": whatsapp_number,
+                "whatsapp_connected": True,
+                "connected_at": get_current_time()
+            }
+        })
+        
+        return jsonify({"success": True, "message": "WhatsApp connected successfully! QR scanned."})
+    except TimeoutException:
+        return jsonify({"success": False, "error": "QR scan timeout. Please try again."}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Connection failed: {str(e)}"}), 400
 
 @app.route("/disconnect-whatsapp", methods=["POST"])
 def disconnect_whatsapp():
@@ -232,11 +268,17 @@ def disconnect_whatsapp():
         return jsonify({"error": "Unauthorized"}), 401
     
     user_id = session["user_id"]
+    
+    # Close driver if exists
+    if user_id in user_drivers:
+        try:
+            user_drivers[user_id].quit()
+        except:
+            pass
+        del user_drivers[user_id]
+    
     clients_col.update_one({"user_id": user_id}, {
-        "$set": {
-            "whatsapp_number": None,
-            "whatsapp_connected": False
-        }
+        "$set": {"whatsapp_number": None, "whatsapp_connected": False}
     })
     
     return jsonify({"success": True, "message": "WhatsApp disconnected"})
@@ -246,7 +288,7 @@ def disconnect_whatsapp():
 broadcast_status = {}  # {user_id: {"running": bool, "done": int, "fail": int, "total": int, "current": int}}
 
 def whatsapp_broadcast_worker(user_id, numbers, message):
-    """Background thread for broadcasting"""
+    """Background thread for broadcasting using Selenium"""
     global broadcast_status
     
     broadcast_status[user_id] = {
@@ -261,43 +303,84 @@ def whatsapp_broadcast_worker(user_id, numbers, message):
     done_count = 0
     fail_count = 0
     
+    driver = user_drivers.get(user_id)
+    if not driver:
+        broadcast_status[user_id]["running"] = False
+        broadcast_status[user_id]["status"] = "error: no driver"
+        return
+    
+    # Make sure we're on WhatsApp Web
+    try:
+        driver.get("https://web.whatsapp.com")
+        time.sleep(5)
+    except:
+        pass
+    
     for idx, number in enumerate(numbers):
         if not broadcast_status.get(user_id, {}).get("running", False):
-            # Broadcast was stopped
             break
         
         number = number.strip()
         if not number:
             continue
         
-        # Remove any non-digit characters except +
+        # Clean number
         clean_num = ''.join(c for c in number if c.isdigit() or c == '+')
         if not clean_num:
             fail_count += 1
+            broadcast_status[user_id]["fail"] = fail_count
             continue
         
         broadcast_status[user_id]["current"] = idx + 1
         broadcast_status[user_id]["status"] = f"Sending to {clean_num}"
         
         try:
-            # Send via pywhatkit – this opens WhatsApp Web
-            kit.sendwhatmsg_instantly(
-                phone_no=clean_num,
-                message=message,
-                wait_time=15,  # seconds to wait for WhatsApp Web to load
-                tab_close=True  # Close tab after sending
+            # Open chat for this number
+            driver.get(f"https://web.whatsapp.com/send?phone={clean_num}")
+            
+            # Wait for the message input box to load
+            wait = WebDriverWait(driver, 30)
+            
+            # Wait for the message input div to be present
+            msg_box = wait.until(
+                EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true' and @data-tab='10']"))
             )
             
-            # Small delay to avoid detection
-            time.sleep(random.uniform(3, 6))
+            # Additional wait to ensure the chat is fully loaded
+            time.sleep(3)
+            
+            msg_box.click()
+            time.sleep(1)
+            
+            # Type message character by character for realism
+            for char in message:
+                msg_box.send_keys(char)
+                time.sleep(random.uniform(0.01, 0.05))
+            
+            time.sleep(1)
+            
+            # Send via Enter key
+            msg_box.send_keys(Keys.ENTER)
+            
+            # Wait a bit to ensure message is sent
+            time.sleep(random.uniform(2, 4))
             
             done_count += 1
             broadcast_status[user_id]["done"] = done_count
             
-        except Exception as e:
-            print(f"Failed to send to {clean_num}: {str(e)}")
+        except TimeoutException:
             fail_count += 1
             broadcast_status[user_id]["fail"] = fail_count
+            print(f"[!] Timeout sending to {clean_num}")
+        except Exception as e:
+            fail_count += 1
+            broadcast_status[user_id]["fail"] = fail_count
+            print(f"[!] Error sending to {clean_num}: {str(e)}")
+        
+        # Random delay between sends (5-10 seconds) to avoid rate limiting
+        if idx < len(numbers) - 1:  # Don't sleep after the last one
+            delay = random.uniform(5, 10)
+            time.sleep(delay)
     
     # Mark complete
     broadcast_status[user_id]["running"] = False
@@ -310,7 +393,7 @@ def whatsapp_broadcast_worker(user_id, numbers, message):
         "numbers_count": len(numbers),
         "done": done_count,
         "fail": fail_count,
-        "message": message,
+        "message": message[:50] + "..." if len(message) > 50 else message,
         "started_at": get_current_time(),
         "completed_at": get_current_time(),
         "status": "completed"
@@ -333,6 +416,9 @@ def start_broadcast():
     if not client or not client.get("whatsapp_connected"):
         return jsonify({"error": "Please connect your WhatsApp number first"}), 400
     
+    if user_id not in user_drivers:
+        return jsonify({"error": "WhatsApp Web session not active. Please reconnect."}), 400
+    
     if broadcast_status.get(user_id, {}).get("running", False):
         return jsonify({"error": "Broadcast already running"}), 400
     
@@ -346,7 +432,7 @@ def start_broadcast():
     if not numbers:
         return jsonify({"error": "number.txt is empty"}), 400
     
-    # Get broadcast message
+    # Get broadcast message from admin
     settings = db.settings.find_one({"key": "broadcast_message"})
     message = settings["value"] if settings else None
     
@@ -399,6 +485,14 @@ def get_broadcast_status():
 
 @app.route("/logout")
 def user_logout():
+    user_id = session.get("user_id")
+    if user_id and user_id in user_drivers:
+        try:
+            user_drivers[user_id].quit()
+        except:
+            pass
+        del user_drivers[user_id]
+    
     session.pop("user_id", None)
     session.pop("login_key", None)
     return redirect("/")
@@ -421,4 +515,5 @@ if __name__ == "__main__":
     print("[+] WhatsApp Spreader Panel starting...")
     print("[+] Default Admin: http://127.0.0.1:5000/admin/login")
     print("[+] User Login: http://127.0.0.1:5000/")
+    print("[!] On first run, Chrome will open for WhatsApp Web QR scan.")
     app.run(debug=True, host="0.0.0.0", port=5000)
