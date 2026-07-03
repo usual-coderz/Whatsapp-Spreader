@@ -16,6 +16,7 @@ import os
 import json
 import random
 import string
+import base64
 from datetime import datetime
 from bson.objectid import ObjectId
 
@@ -24,8 +25,8 @@ app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24).hex())
 
 # ─── Configuration ──────────────────────────────────────────────
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb+srv://nexacoders2_db_user:dxYh7QOdHvH6OVdd@cluster0.f4qxcbk.mongodb.net/?appName=Cluster0")
-client = MongoClient(MONGO_URI)
-db = client["whatsapp_spreader"]
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["whatsapp_spreader"]
 users_col = db["users"]
 clients_col = db["clients"]
 keys_col = db["login_keys"]
@@ -49,46 +50,37 @@ def generate_user_id():
 def get_current_time():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-def create_driver(user_id):
-    """Create a HEADLESS Chrome driver for Heroku-compatible WhatsApp Web"""
-    chrome_options = Options()
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--headless=new")  # REQUIRED on Heroku
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option("useAutomationExtension", False)
-
-    if IS_HEROKU:
-        # Heroku: Chrome is installed by buildpack at this path
-        chrome_options.binary_location = os.environ.get(
-            "GOOGLE_CHROME_BIN",
-            "/app/.apt/usr/bin/google-chrome"
-        )
-        service = Service(os.environ.get(
-            "CHROMEDRIVER_PATH",
-            "/app/.chromedriver/bin/chromedriver"
-        ))
-    else:
-        # Local: use webdriver_manager
-        from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-
-    # Set window size for headless mode
-    driver.set_window_size(1280, 720)
-    driver.get("https://web.whatsapp.com")
-    return driver
-
 def load_numbers():
-    """Load numbers from file or return empty list"""
     number_file = "number.txt"
     if not os.path.exists(number_file):
         return []
     with open(number_file, "r") as f:
         return [line.strip() for line in f if line.strip()]
+
+def create_driver(user_id):
+    """Create a Chrome driver - QR-friendly on Heroku"""
+    chrome_options = Options()
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
+
+    if IS_HEROKU:
+        chrome_bin = os.environ.get("GOOGLE_CHROME_BIN", "/app/.apt/usr/bin/google-chrome")
+        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH", "/app/.chromedriver/bin/chromedriver")
+        chrome_options.binary_location = chrome_bin
+        service = Service(executable_path=chromedriver_path)
+    else:
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.set_window_size(1280, 900)
+    return driver
 
 # ─── Routes ─────────────────────────────────────────────────────
 
@@ -111,19 +103,15 @@ def admin_login():
 
 @app.route("/admin/register", methods=["POST"])
 def admin_register():
-    # Only allow registration if no admin exists OR via a secret code
     existing = users_col.find_one({"role": "admin"})
     if existing:
-        # Require an admin secret for additional registrations
         secret = request.form.get("admin_secret", "")
         if secret != os.environ.get("ADMIN_SECRET", "changeme123"):
             return render_template("index.html", error="Registration disabled or invalid secret")
-
     username = request.form.get("username")
     password = request.form.get("password")
     if users_col.find_one({"username": username}):
         return render_template("index.html", error="Username already exists")
-
     hashed_pw = generate_password_hash(password)
     users_col.insert_one({
         "username": username,
@@ -137,11 +125,9 @@ def admin_register():
 def admin_dashboard():
     if not session.get("admin"):
         return redirect("/")
-
     keys = list(keys_col.find().sort("created_at", -1))
     clients = list(clients_col.find().sort("created_at", -1))
     broadcasts = list(broadcast_col.find().sort("started_at", -1).limit(50))
-
     return render_template("admin.html",
                          keys=keys, clients=clients, broadcasts=broadcasts,
                          total_keys=len(keys),
@@ -200,7 +186,6 @@ def user_login():
         return render_template("index.html", error="Invalid login key")
     if key_doc.get("used"):
         return render_template("index.html", error="This key has already been used")
-
     user_id = generate_user_id()
     keys_col.update_one({"_id": key_doc["_id"]}, {
         "$set": {"used": True, "assigned_to": user_id, "used_at": get_current_time()}
@@ -213,7 +198,8 @@ def user_login():
         "created_at": get_current_time(),
         "last_broadcast": None,
         "total_sent": 0,
-        "total_failed": 0
+        "total_failed": 0,
+        "qr_pending": False
     })
     session["user_id"] = user_id
     session["login_key"] = login_key
@@ -239,28 +225,125 @@ def user_dashboard():
 def connect_whatsapp():
     if not session.get("user_id"):
         return jsonify({"error": "Unauthorized"}), 401
+
     whatsapp_number = request.form.get("whatsapp_number")
     if not whatsapp_number:
         return jsonify({"error": "WhatsApp number required"}), 400
 
     user_id = session["user_id"]
+
     try:
+        # Close existing driver if any
+        if user_id in user_drivers:
+            try:
+                user_drivers[user_id].quit()
+            except:
+                pass
+            del user_drivers[user_id]
+
         driver = create_driver(user_id)
-        # In headless mode on Heroku, QR scan is not possible.
-        # This will save the session if the user scans elsewhere,
-        # but on Heroku you need a persistent session approach.
-        # For demo, we just mark connected.
+        driver.get("https://web.whatsapp.com")
+        time.sleep(8)  # Wait for page to fully load
+
+        # Check if already logged in (session exists from before)
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//div[@data-testid='conversation-panel-wrapper']"))
+            )
+            # Already logged in!
+            user_drivers[user_id] = driver
+            clients_col.update_one({"user_id": user_id}, {
+                "$set": {
+                    "whatsapp_number": whatsapp_number,
+                    "whatsapp_connected": True,
+                    "qr_pending": False,
+                    "connected_at": get_current_time()
+                }
+            })
+            return jsonify({"success": True, "message": "Already connected! Session restored."})
+        except TimeoutException:
+            pass  # Not logged in, need QR code
+
+        # Try to find QR code element
+        qr_base64 = None
+        qr_selectors = [
+            "//canvas",
+            "//div[contains(@data-testid, 'qrcode')]//canvas",
+            "//img[contains(@alt, 'QR')]",
+            "//canvas[contains(@aria-label, 'QR')]",
+            "//div[contains(@class, 'qr')]//canvas"
+        ]
+
+        for selector in qr_selectors:
+            try:
+                qr_element = driver.find_element(By.XPATH, selector)
+                qr_base64 = driver.execute_script("""
+                    var canvas = arguments[0];
+                    return canvas.toDataURL('image/png').substring(22);
+                """, qr_element)
+                if qr_base64 and len(qr_base64) > 100:
+                    break
+            except:
+                continue
+
+        # If no QR canvas found, take full screenshot
+        if not qr_base64:
+            screenshot_path = f"/tmp/qr_{user_id}.png"
+            driver.save_screenshot(screenshot_path)
+            with open(screenshot_path, "rb") as f:
+                qr_base64 = base64.b64encode(f.read()).decode()
+
+        # Store driver for later use
         user_drivers[user_id] = driver
+
+        # Mark QR as pending
         clients_col.update_one({"user_id": user_id}, {
             "$set": {
                 "whatsapp_number": whatsapp_number,
-                "whatsapp_connected": True,
+                "whatsapp_connected": False,
+                "qr_pending": True,
                 "connected_at": get_current_time()
             }
         })
-        return jsonify({"success": True, "message": "WhatsApp session initialized"})
+
+        return jsonify({
+            "success": True,
+            "qr_code": qr_base64,
+            "message": "Scan the QR code with your phone's WhatsApp. Valid for ~60 seconds."
+        })
+
     except Exception as e:
         return jsonify({"success": False, "error": f"Connection failed: {str(e)}"}), 400
+
+
+@app.route("/check-whatsapp-status", methods=["GET"])
+def check_whatsapp_status():
+    if not session.get("user_id"):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    user_id = session["user_id"]
+    driver = user_drivers.get(user_id)
+
+    if not driver:
+        return jsonify({"connected": False, "error": "No driver session"})
+
+    try:
+        # Take a screenshot and check for the main chat panel
+        driver.find_element(By.XPATH, "//div[@data-testid='conversation-panel-wrapper']")
+        # Connected successfully
+        clients_col.update_one({"user_id": user_id}, {
+            "$set": {"whatsapp_connected": True, "qr_pending": False}
+        })
+        # Also get the connected phone number from the page
+        try:
+            phone_elem = driver.find_element(By.XPATH, "//header//span[@data-testid='conversation-info-header']")
+            phone = phone_elem.text
+        except:
+            phone = "Unknown"
+        return jsonify({"connected": True, "phone": phone})
+    except:
+        return jsonify({"connected": False})
+
 
 @app.route("/disconnect-whatsapp", methods=["POST"])
 def disconnect_whatsapp():
@@ -274,7 +357,7 @@ def disconnect_whatsapp():
             pass
         del user_drivers[user_id]
     clients_col.update_one({"user_id": user_id}, {
-        "$set": {"whatsapp_number": None, "whatsapp_connected": False}
+        "$set": {"whatsapp_number": None, "whatsapp_connected": False, "qr_pending": False}
     })
     return jsonify({"success": True})
 
@@ -282,15 +365,21 @@ def disconnect_whatsapp():
 
 def whatsapp_broadcast_worker(user_id, numbers, message):
     global broadcast_status
+
     broadcast_status[user_id] = {
         "running": True, "done": 0, "fail": 0,
         "total": len(numbers), "current": 0, "status": "starting"
     }
+
     done_count = 0
     fail_count = 0
+
     driver = user_drivers.get(user_id)
     if not driver:
-        broadcast_status[user_id] = {"running": False, "done": 0, "fail": 0, "total": 0, "current": 0, "status": "no driver"}
+        broadcast_status[user_id] = {
+            "running": False, "done": 0, "fail": 0,
+            "total": 0, "current": 0, "status": "no driver"
+        }
         return
 
     try:
@@ -302,9 +391,11 @@ def whatsapp_broadcast_worker(user_id, numbers, message):
     for idx, number in enumerate(numbers):
         if not broadcast_status.get(user_id, {}).get("running", False):
             break
+
         number = number.strip()
         if not number:
             continue
+
         clean_num = ''.join(c for c in number if c.isdigit() or c == '+')
         if not clean_num:
             fail_count += 1
@@ -323,23 +414,30 @@ def whatsapp_broadcast_worker(user_id, numbers, message):
             time.sleep(3)
             msg_box.click()
             time.sleep(1)
+
             for char in message:
                 msg_box.send_keys(char)
                 time.sleep(random.uniform(0.01, 0.05))
+
             time.sleep(1)
             msg_box.send_keys(Keys.ENTER)
             time.sleep(random.uniform(2, 4))
+
             done_count += 1
             broadcast_status[user_id]["done"] = done_count
+
         except TimeoutException:
             fail_count += 1
             broadcast_status[user_id]["fail"] = fail_count
+            print(f"[!] Timeout sending to {clean_num}")
         except Exception as e:
             fail_count += 1
             broadcast_status[user_id]["fail"] = fail_count
+            print(f"[!] Error sending to {clean_num}: {str(e)}")
 
         if idx < len(numbers) - 1:
-            time.sleep(random.uniform(5, 10))
+            delay = random.uniform(5, 10)
+            time.sleep(delay)
 
     broadcast_status[user_id]["running"] = False
     broadcast_status[user_id]["status"] = "completed"
@@ -355,19 +453,24 @@ def whatsapp_broadcast_worker(user_id, numbers, message):
         "completed_at": get_current_time(),
         "status": "completed"
     })
+
     clients_col.update_one({"user_id": user_id}, {
         "$set": {"last_broadcast": get_current_time()},
         "$inc": {"total_sent": done_count, "total_failed": fail_count}
     })
 
+
 @app.route("/start-broadcast", methods=["POST"])
 def start_broadcast():
     if not session.get("user_id"):
         return jsonify({"error": "Unauthorized"}), 401
+
     user_id = session["user_id"]
     client = clients_col.find_one({"user_id": user_id})
+
     if not client or not client.get("whatsapp_connected"):
-        return jsonify({"error": "WhatsApp not connected"}), 400
+        return jsonify({"error": "WhatsApp not connected. Connect first."}), 400
+
     if broadcast_status.get(user_id, {}).get("running", False):
         return jsonify({"error": "Broadcast already running"}), 400
 
@@ -378,11 +481,21 @@ def start_broadcast():
     settings = db.settings.find_one({"key": "broadcast_message"})
     message = settings["value"] if settings else None
     if not message:
-        return jsonify({"error": "No broadcast message set"}), 400
+        return jsonify({"error": "No broadcast message set by admin"}), 400
 
-    thread = threading.Thread(target=whatsapp_broadcast_worker, args=(user_id, numbers, message), daemon=True)
+    thread = threading.Thread(
+        target=whatsapp_broadcast_worker,
+        args=(user_id, numbers, message),
+        daemon=True
+    )
     thread.start()
-    return jsonify({"success": True, "message": f"Broadcast started. {len(numbers)} targets.", "total_numbers": len(numbers)})
+
+    return jsonify({
+        "success": True,
+        "message": f"Broadcast started. Sending to {len(numbers)} numbers.",
+        "total_numbers": len(numbers)
+    })
+
 
 @app.route("/stop-broadcast", methods=["POST"])
 def stop_broadcast():
@@ -395,13 +508,18 @@ def stop_broadcast():
         return jsonify({"success": True})
     return jsonify({"error": "No active broadcast"}), 400
 
+
 @app.route("/broadcast-status", methods=["GET"])
 def get_broadcast_status():
     if not session.get("user_id"):
         return jsonify({"error": "Unauthorized"}), 401
     user_id = session["user_id"]
-    status = broadcast_status.get(user_id, {"running": False, "done": 0, "fail": 0, "total": 0, "current": 0, "status": "idle"})
+    status = broadcast_status.get(user_id, {
+        "running": False, "done": 0, "fail": 0,
+        "total": 0, "current": 0, "status": "idle"
+    })
     return jsonify(status)
+
 
 @app.route("/logout")
 def user_logout():
@@ -414,6 +532,7 @@ def user_logout():
         del user_drivers[user_id]
     session.clear()
     return redirect("/")
+
 
 # ─── Default Admin Setup ────────────────────────────────────────
 
