@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Broadcast - Login</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0a0a0a; display: flex; justify-content: center; align-items: center; height: 100vh; color: #fff; }
+    .container { background: #1a1a2e; padding: 40px; border-radius: 16px; width: 400px; box-shadow: 0 0 40px rgba(0,255,136,0.1); border: 1px solid #2a2a4a; }
+    h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #00ff88; }
+    .subtitle { text-align: center; color: #888; margin-bottom: 30px; font-size: 14px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; margin-bottom: 6px; color: #aaa; font-size: 14px; }
+    input { width: 100%; padding: 12px 16px; border: 1px solid #333; border-radius: 8px; font-size: 15px; background: #0f0f23; color: #fff; outline: none; transition: 0.3s; }
+    input:focus { border-color: #00ff88; box-shadow: 0 0 10px rgba(0,255,136,0.2); }
+    button { width: 100%; padding: 14px; background: #00ff88; color: #000; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+    button:hover { background: #00cc6a; transform: translateY(-1px); }
+    .error { color: #ff4444; margin-top: 12px; text-align: center; font-size: 14px; display: none; }
+    .info { color: #aaa; text-align: center; margin-top: 20px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📡 WhatsApp Broadcast</h1>
+    <p class="subtitle">Enter your login credentials</p>
+    <div class="form-group">
+      <label>Login Key</label>
+      <input type="text" id="loginKey" placeholder="Enter your login key" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Enter your password">
+    </div>
+    <button onclick="login()">🔓 Login</button>
+    <div class="error" id="errorMsg"></div>
+    <p class="info">Authorized users only. All activity is logged.</p>
+  </div>
+  <script>
+    async function login() {
+      const loginKey = document.getElementById('loginKey').value;
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('errorMsg');
+      
+      if (!loginKey || !password) {
+        errorEl.textContent = 'Please fill in all fields';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ loginKey, password })
+        });
+        const data = await res.json();
+        
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('role', data.role);
+          localStorage.setItem('name', data.name);
+          if (data.role === 'admin') {
+            window.location.href = '/admin.html';
+          } else {
+            window.location.href = '/user-dashboard.html';
+          }
+        } else {
+          errorEl.textContent = data.error || 'Login failed';
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Server error';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    document.addEventListener('keypress', (e) => { if (e.key === 'Enter') login(); });
+  </script>
+</body>
+</html>
