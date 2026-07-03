@@ -209,9 +209,8 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => { console.error('MongoDB error:', err); process.exit(1); });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📋 Admin login key: ${process.env.ADMIN_LOGIN_KEY}`);
-  console.log(`📋 Admin password: admin123`);
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, '0.0.0.0', () => {   // ← '0.0.0.0' add karo
+  console.log(`\n🚀 Server running on http://0.0.0.0:${PORT}`);
+  ...
 });
