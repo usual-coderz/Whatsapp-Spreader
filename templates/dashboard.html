@@ -3,102 +3,261 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Dashboard - WhatsApp Spreader</title>
+    <title>Dashboard - WhatsApp Spreader</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-        body { background: #0d1117; color: #c9d1d9; }
-        .card { background: #161b22; border: 1px solid #30363d; }
-        .table { color: #c9d1d9; }
-        .table th { border-color: #30363d; }
-        .table td { border-color: #21262d; }
-        .form-control { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; }
-        .form-control:focus { background: #0d1117; border-color: #58a6ff; color: #c9d1d9; }
+        body { 
+            background: #0d1117; 
+            color: #c9d1d9; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+        }
+        .card { 
+            background: #161b22; 
+            border: 1px solid #30363d; 
+            border-radius: 8px;
+        }
+        .table { color: #c9d1d9; margin-bottom: 0; }
+        .table th { 
+            border-color: #30363d; 
+            color: #8b949e;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .table td { border-color: #21262d; vertical-align: middle; }
+        .form-control { 
+            background: #0d1117; 
+            border: 1px solid #30363d; 
+            color: #c9d1d9; 
+            border-radius: 6px;
+        }
+        .form-control:focus { 
+            background: #0d1117; 
+            border-color: #58a6ff; 
+            color: #c9d1d9; 
+            box-shadow: 0 0 0 2px rgba(88,166,255,0.15);
+        }
+        .form-control::placeholder { color: #484f58; }
+        
         .btn-success { background: #238636; border: none; }
         .btn-success:hover { background: #2ea043; }
         .btn-danger { background: #da3633; border: none; }
+        .btn-danger:hover { background: #f85149; }
+        .btn-outline-danger { color: #da3633; border-color: #30363d; }
+        .btn-outline-danger:hover { background: #da3633; border-color: #da3633; color: #fff; }
+        .btn-outline-secondary { color: #8b949e; border-color: #30363d; }
+        .btn-outline-secondary:hover { background: #30363d; color: #c9d1d9; }
+        .btn-lg { padding: 12px 32px; font-size: 1rem; }
+        
         .brand { color: #25D366; }
-        .stat-box { background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 20px; text-align: center; }
-        .msg-box { background: #1c2128; border-left: 4px solid #25D366; padding: 15px; border-radius: 0 8px 8px 0; margin-top: 10px; }
-        .progress { background: #21262d; height: 25px; }
-        .progress-bar { background: #238636; }
-        .status-badge { font-size: 14px; padding: 5px 12px; }
+        .navbar { background: #161b22; border-bottom: 1px solid #21262d !important; }
+        .stat-box { 
+            background: #1c2128; 
+            border: 1px solid #30363d; 
+            border-radius: 8px; 
+            padding: 24px 16px; 
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .stat-box:hover { border-color: #58a6ff; }
+        .stat-box h6 { color: #8b949e; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .stat-box h2 { margin-bottom: 0; font-weight: 700; }
+        
+        .msg-box { 
+            background: #1c2128; 
+            border-left: 4px solid #25D366; 
+            padding: 16px 20px; 
+            border-radius: 0 8px 8px 0; 
+            margin-top: 12px;
+            word-break: break-word;
+        }
+        .progress { 
+            background: #21262d; 
+            height: 28px; 
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .progress-bar { 
+            background: #238636; 
+            font-size: 0.8rem;
+            font-weight: 600;
+            line-height: 28px;
+            transition: width 0.5s ease;
+        }
+        .status-badge { font-size: 13px; padding: 6px 14px; border-radius: 20px; }
+        
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .connection-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .connection-dot.connected { background: #3fb950; box-shadow: 0 0 8px rgba(63,185,80,0.4); }
+        .connection-dot.disconnected { background: #f85149; box-shadow: 0 0 8px rgba(248,81,73,0.4); }
+        
+        .key-display {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+            background: #0d1117;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            font-size: 0.9rem;
+        }
+        
+        .broadcast-card {
+            border-left: 4px solid #238636;
+        }
+        
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+        
+        .table-responsive {
+            scrollbar-width: thin;
+            scrollbar-color: #30363d #0d1117;
+        }
+        .table-responsive::-webkit-scrollbar { width: 6px; }
+        .table-responsive::-webkit-scrollbar-track { background: #0d1117; }
+        .table-responsive::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+        
+        @media (max-width: 768px) {
+            .stat-box { padding: 16px 12px; }
+            .stat-box h2 { font-size: 1.5rem; }
+            .btn-lg { padding: 10px 20px; font-size: 0.9rem; }
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark border-bottom border-secondary px-3">
-        <span class="navbar-brand brand">💬 Dashboard</span>
-        <div>
-            <span class="text-secondary me-3">Key: <code>{{ client.login_key[:12] }}...</code></span>
-            <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+    <!-- Toast container for notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar navbar-dark px-3 py-2">
+        <div class="container-fluid">
+            <span class="navbar-brand brand fs-4 fw-bold">
+                <i class="bi bi-whatsapp"></i> WhatsApp Spreader
+            </span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-secondary small d-none d-md-inline">
+                    <i class="bi bi-key"></i> Key: <code class="text-info">{{ client.login_key[:16] }}...</code>
+                </span>
+                <a href="/logout" class="btn btn-outline-danger btn-sm">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </a>
+            </div>
         </div>
     </nav>
-    
+
     <div class="container mt-4">
-        <!-- Stats -->
-        <div class="row mb-4">
+        <!-- Stats Row -->
+        <div class="row mb-4 g-3">
             <div class="col-md-4">
                 <div class="stat-box">
-                    <h6 class="text-secondary">Total Sent</h6>
-                    <h2 class="brand">{{ client.total_sent }}</h2>
+                    <h6><i class="bi bi-check-circle"></i> Total Sent</h6>
+                    <h2 class="brand" id="totalSent">{{ client.total_sent }}</h2>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="stat-box">
-                    <h6 class="text-secondary">Total Failed</h6>
-                    <h2 class="text-danger">{{ client.total_failed }}</h2>
+                    <h6><i class="bi bi-x-circle"></i> Total Failed</h6>
+                    <h2 class="text-danger" id="totalFailed">{{ client.total_failed }}</h2>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="stat-box">
-                    <h6 class="text-secondary">WhatsApp Status</h6>
+                    <h6><i class="bi bi-wifi"></i> WhatsApp Status</h6>
                     {% if client.whatsapp_connected %}
-                    <h5 class="text-success">✅ Connected ({{ client.whatsapp_number }})</h5>
+                    <div class="connection-status justify-content-center">
+                        <span class="connection-dot connected"></span>
+                        <h5 class="text-success mb-0">Connected</h5>
+                    </div>
+                    <small class="text-secondary d-block mt-1">{{ client.whatsapp_number }}</small>
                     {% else %}
-                    <h5 class="text-warning">⚠️ Not Connected</h5>
+                    <div class="connection-status justify-content-center">
+                        <span class="connection-dot disconnected"></span>
+                        <h5 class="text-warning mb-0">Not Connected</h5>
+                    </div>
                     {% endif %}
                 </div>
             </div>
         </div>
-        
-        <!-- Connect WhatsApp -->
+
+        <!-- Connect WhatsApp Section -->
         {% if not client.whatsapp_connected %}
         <div class="card p-4 mb-4">
-            <h5><i class="bi bi-whatsapp"></i> Connect Your WhatsApp</h5>
-            <p class="text-secondary">Enter your WhatsApp number with country code (e.g., +1234567890)</p>
-            <div class="row">
-                <div class="col-md-6">
-                    <input type="text" id="whatsappNumber" class="form-control" placeholder="+1234567890">
+            <div class="row align-items-center">
+                <div class="col-md-7">
+                    <h5 class="fw-bold"><i class="bi bi-whatsapp text-success"></i> Connect Your WhatsApp</h5>
+                    <p class="text-secondary mb-2">Enter your WhatsApp number with country code to get started.</p>
+                    <div class="alert alert-info py-2 small border-0" style="background: #0d1117; color: #58a6ff;">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>QR Scan Required:</strong> Chrome will open WhatsApp Web. 
+                        You have <strong>60 seconds</strong> to scan the QR code with your phone.
+                    </div>
                 </div>
-                <div class="col-md-3">
-                    <button id="connectBtn" class="btn btn-success w-100">Connect</button>
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <input type="text" id="whatsappNumber" class="form-control" placeholder="+1234567890">
+                        <button id="connectBtn" class="btn btn-success px-4">
+                            <i class="bi bi-plug"></i> Connect
+                        </button>
+                    </div>
+                    <div id="connectStatus" class="mt-2"></div>
                 </div>
             </div>
-            <div id="connectStatus" class="mt-2"></div>
         </div>
         {% else %}
         <div class="card p-3 mb-4">
             <div class="d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-whatsapp text-success"></i> Connected: <strong>{{ client.whatsapp_number }}</strong></span>
-                <button id="disconnectBtn" class="btn btn-outline-danger btn-sm">Disconnect</button>
+                <div class="d-flex align-items-center gap-3">
+                    <span class="connection-dot connected"></span>
+                    <span class="fw-bold">
+                        <i class="bi bi-whatsapp text-success"></i> 
+                        Connected: <span class="text-success">{{ client.whatsapp_number }}</span>
+                    </span>
+                </div>
+                <button id="disconnectBtn" class="btn btn-outline-danger btn-sm px-3">
+                    <i class="bi bi-plug"></i> Disconnect
+                </button>
             </div>
         </div>
         {% endif %}
-        
-        <!-- Broadcast Message from Admin -->
+
+        <!-- Broadcast Message Display -->
         <div class="card p-3 mb-4">
-            <h5><i class="bi bi-megaphone-fill"></i> Broadcast Message (Set by Admin)</h5>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="bi bi-megaphone-fill text-warning"></i>
+                <h5 class="fw-bold mb-0">Broadcast Message</h5>
+                <span class="badge bg-secondary ms-2">Set by Admin</span>
+            </div>
             <div class="msg-box">
                 <p class="mb-0">{{ broadcast_msg }}</p>
             </div>
         </div>
-        
+
         <!-- Broadcast Controls -->
-        <div class="card p-4 mb-4">
-            <h5><i class="bi bi-send-fill"></i> Broadcast Controls</h5>
-            <p class="text-secondary">Numbers loaded from <code>number.txt</code> (one per line, with country code)</p>
+        <div class="card p-4 mb-4 broadcast-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h5 class="fw-bold mb-1"><i class="bi bi-send-fill"></i> Broadcast Controls</h5>
+                    <p class="text-secondary small mb-0">
+                        <i class="bi bi-file-earmark-text"></i> 
+                        Numbers loaded from <code>number.txt</code> (one per line with country code)
+                    </p>
+                </div>
+            </div>
             
-            <div class="d-flex gap-2 mb-3">
+            <div class="d-flex gap-3 mb-3">
                 <button id="startBroadcast" class="btn btn-success btn-lg" {% if not client.whatsapp_connected %}disabled{% endif %}>
                     <i class="bi bi-play-fill"></i> Start Broadcasting
                 </button>
@@ -106,140 +265,312 @@
                     <i class="bi bi-stop-fill"></i> Stop
                 </button>
             </div>
-            
-            <!-- Live Status -->
+
+            <!-- Live Broadcast Status -->
             <div id="broadcastStatus" style="display:none;">
-                <div class="row mb-2">
-                    <div class="col-md-3"><span id="statusText" class="badge bg-warning status-badge">Starting...</span></div>
-                    <div class="col-md-3">Done: <strong id="doneCount" class="text-success">0</strong></div>
-                    <div class="col-md-3">Failed: <strong id="failCount" class="text-danger">0</strong></div>
-                    <div class="col-md-3">Total: <strong id="totalCount">0</strong></div>
+                <div class="row mb-3 g-2">
+                    <div class="col-md-3">
+                        <div class="p-2 rounded" style="background: #0d1117;">
+                            <small class="text-secondary d-block">Status</small>
+                            <span id="statusText" class="badge bg-warning status-badge mt-1">
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                Starting...
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded" style="background: #0d1117;">
+                            <small class="text-secondary d-block">Done</small>
+                            <strong id="doneCount" class="text-success fs-4">0</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded" style="background: #0d1117;">
+                            <small class="text-secondary d-block">Failed</small>
+                            <strong id="failCount" class="text-danger fs-4">0</strong>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded" style="background: #0d1117;">
+                            <small class="text-secondary d-block">Total</small>
+                            <strong id="totalCount" class="fs-4">0</strong>
+                        </div>
+                    </div>
                 </div>
-                <div class="progress">
+                
+                <div class="progress mb-2">
                     <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
                 </div>
-                <p id="currentStatus" class="text-secondary small mt-2"></p>
+                
+                <p id="currentStatus" class="text-secondary small mt-2 mb-0">
+                    <i class="bi bi-arrow-right-circle"></i> 
+                    Waiting to start...
+                </p>
             </div>
         </div>
-        
+
         <!-- Broadcast History -->
-        <div class="card p-3">
-            <h5><i class="bi bi-clock-history"></i> My Broadcast History</h5>
-            <div class="table-responsive">
-                <table class="table table-sm table-dark">
-                    <thead>
+        <div class="card p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0"><i class="bi bi-clock-history"></i> Broadcast History</h5>
+                <span class="badge bg-secondary">{{ broadcasts|length }} records</span>
+            </div>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm table-hover align-middle">
+                    <thead class="sticky-top" style="background: #161b22;">
                         <tr>
+                            <th>#</th>
                             <th>Total</th>
                             <th>Done</th>
                             <th>Fail</th>
+                            <th>Rate</th>
                             <th>Time</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for b in broadcasts %}
+                        {% set rate = (b.done / b.numbers_count * 100)|round if b.numbers_count > 0 else 0 %}
                         <tr>
+                            <td class="text-secondary">{{ loop.index }}</td>
                             <td>{{ b.numbers_count }}</td>
-                            <td class="text-success">{{ b.done }}</td>
+                            <td class="text-success fw-bold">{{ b.done }}</td>
                             <td class="text-danger">{{ b.fail }}</td>
-                            <td class="small">{{ b.started_at }}</td>
-                            <td><span class="badge bg-success">{{ b.status }}</span></td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="progress flex-grow-1" style="height: 6px; background: #21262d;">
+                                        <div class="progress-bar bg-success" style="width: {{ rate }}%; height: 6px;"></div>
+                                    </div>
+                                    <small class="text-secondary" style="min-width: 35px;">{{ rate }}%</small>
+                                </div>
+                            </td>
+                            <td class="small text-secondary">{{ b.started_at }}</td>
+                            <td>
+                                {% if b.status == 'completed' %}
+                                <span class="badge bg-success status-badge">Completed</span>
+                                {% elif b.status == 'stopped' %}
+                                <span class="badge bg-warning status-badge">Stopped</span>
+                                {% else %}
+                                <span class="badge bg-secondary status-badge">{{ b.status }}</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                         {% if not broadcasts %}
-                        <tr><td colspan="5" class="text-secondary">No broadcasts yet</td></tr>
+                        <tr>
+                            <td colspan="7" class="text-center text-secondary py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                No broadcasts yet. Start one above!
+                            </td>
+                        </tr>
                         {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
-    
+
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script>
-        // Connect WhatsApp
-        $("#connectBtn").click(function() {
-            const number = $("#whatsappNumber").val().trim();
-            if (!number) { alert("Enter a WhatsApp number"); return; }
+        // ─── Toast Notification ─────────────────────────────────
+        function showToast(message, type = 'info') {
+            const bg = {
+                success: '#238636',
+                danger: '#da3633',
+                warning: '#d29922',
+                info: '#1f6feb'
+            };
+            const icon = {
+                success: 'bi-check-circle-fill',
+                danger: 'bi-exclamation-circle-fill',
+                warning: 'bi-exclamation-triangle-fill',
+                info: 'bi-info-circle-fill'
+            };
             
-            $.post("/connect-whatsapp", {whatsapp_number: number}, function(data) {
-                if (data.success) {
-                    $("#connectStatus").html('<div class="alert alert-success py-1">✅ Connected! Refreshing...</div>');
-                    setTimeout(() => location.reload(), 1500);
-                }
-            });
-        });
-        
-        // Disconnect WhatsApp
-        $("#disconnectBtn").click(function() {
-            if (!confirm("Disconnect WhatsApp?")) return;
-            $.post("/disconnect-whatsapp", function(data) {
-                if (data.success) location.reload();
-            });
-        });
-        
-        // Broadcast Control
-        let statusInterval = null;
-        
-        $("#startBroadcast").click(function() {
+            const toast = `
+                <div class="toast align-items-center text-white border-0 show" role="alert" 
+                     style="background: ${bg[type] || bg.info}; min-width: 280px;">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="bi ${icon[type] || icon.info} me-2"></i>
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                    </div>
+                </div>
+            `;
+            
+            const container = $('#toastContainer');
+            container.append(toast);
+            
+            setTimeout(() => {
+                container.find('.toast').first().remove();
+            }, 5000);
+        }
+
+        // ─── Connect WhatsApp ──────────────────────────────────
+        $('#connectBtn').click(function() {
+            const number = $('#whatsappNumber').val().trim();
+            if (!number) {
+                showToast('Please enter your WhatsApp number', 'warning');
+                $('#whatsappNumber').focus();
+                return;
+            }
+            
             const btn = $(this);
-            btn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm"></span> Starting...');
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Connecting...');
             
-            $.post("/start-broadcast", function(data) {
-                if (data.success) {
-                    $("#broadcastStatus").show();
-                    $("#startBroadcast").prop("disabled", true);
-                    $("#stopBroadcast").prop("disabled", false);
-                    btn.html('<i class="bi bi-play-fill"></i> Start Broadcasting');
-                    
-                    // Start polling
-                    statusInterval = setInterval(pollStatus, 1500);
-                } else {
-                    btn.prop("disabled", false).html('<i class="bi bi-play-fill"></i> Start Broadcasting');
-                    alert(data.error);
-                }
-            }).fail(function() {
-                btn.prop("disabled", false).html('<i class="bi bi-play-fill"></i> Start Broadcasting');
-                alert("Failed to start broadcast");
-            });
+            $.post('/connect-whatsapp', {whatsapp_number: number})
+                .done(function(data) {
+                    if (data.success) {
+                        showToast('✅ Connected! Refreshing dashboard...', 'success');
+                        setTimeout(() => location.reload(), 2000);
+                    } else {
+                        showToast(data.error || 'Connection failed', 'danger');
+                        btn.prop('disabled', false).html('<i class="bi bi-plug"></i> Connect');
+                    }
+                })
+                .fail(function(xhr) {
+                    const err = xhr.responseJSON?.error || 'Connection failed. Check server logs.';
+                    showToast(err, 'danger');
+                    btn.prop('disabled', false).html('<i class="bi bi-plug"></i> Connect');
+                });
         });
-        
-        $("#stopBroadcast").click(function() {
-            $.post("/stop-broadcast", function(data) {
-                if (data.success) {
-                    clearInterval(statusInterval);
-                    $("#statusText").text("Stopped").removeClass().addClass("badge bg-danger status-badge");
-                    $("#stopBroadcast").prop("disabled", true);
-                    $("#startBroadcast").prop("disabled", false);
-                }
-            });
+
+        // ─── Disconnect WhatsApp ───────────────────────────────
+        $('#disconnectBtn').click(function() {
+            if (!confirm('Disconnect WhatsApp? Your session will be saved.')) return;
+            
+            $.post('/disconnect-whatsapp')
+                .done(function(data) {
+                    if (data.success) {
+                        showToast('Disconnected successfully', 'info');
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                })
+                .fail(function() {
+                    showToast('Failed to disconnect', 'danger');
+                });
         });
-        
+
+        // ─── Broadcast Control ────────────────────────────────
+        let statusInterval = null;
+
+        $('#startBroadcast').click(function() {
+            const btn = $(this);
+            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Starting broadcast...');
+            
+            $.post('/start-broadcast')
+                .done(function(data) {
+                    if (data.success) {
+                        showToast(`Broadcast started: ${data.total_numbers} targets`, 'success');
+                        
+                        $('#broadcastStatus').slideDown(300);
+                        $('#totalCount').text(data.total_numbers);
+                        $('#startBroadcast').prop('disabled', true);
+                        $('#stopBroadcast').prop('disabled', false);
+                        
+                        // Start polling
+                        if (statusInterval) clearInterval(statusInterval);
+                        statusInterval = setInterval(pollStatus, 1500);
+                    } else {
+                        showToast(data.error, 'danger');
+                        btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i> Start Broadcasting');
+                    }
+                })
+                .fail(function(xhr) {
+                    const err = xhr.responseJSON?.error || 'Failed to start broadcast';
+                    showToast(err, 'danger');
+                    btn.prop('disabled', false).html('<i class="bi bi-play-fill"></i> Start Broadcasting');
+                });
+        });
+
+        $('#stopBroadcast').click(function() {
+            if (!confirm('Stop the current broadcast?')) return;
+            
+            $.post('/stop-broadcast')
+                .done(function(data) {
+                    if (data.success) {
+                        showToast('Broadcast stopped by user', 'warning');
+                        clearInterval(statusInterval);
+                        statusInterval = null;
+                        
+                        $('#statusText')
+                            .text('Stopped')
+                            .removeClass()
+                            .addClass('badge bg-warning status-badge');
+                        
+                        $('#stopBroadcast').prop('disabled', true);
+                        $('#startBroadcast').prop('disabled', false);
+                    }
+                })
+                .fail(function() {
+                    showToast('Failed to stop broadcast', 'danger');
+                });
+        });
+
+        // ─── Poll Broadcast Status ────────────────────────────
         function pollStatus() {
-            $.get("/broadcast-status", function(data) {
-                $("#doneCount").text(data.done);
-                $("#failCount").text(data.fail);
-                $("#totalCount").text(data.total);
-                $("#currentStatus").text(`Sending: ${data.current}/${data.total}`);
-                
-                const pct = data.total > 0 ? Math.round((data.done + data.fail) / data.total * 100) : 0;
-                $("#progressBar").css("width", pct + "%").text(pct + "%");
-                
-                if (data.status === "completed") {
-                    clearInterval(statusInterval);
-                    $("#statusText").text("✅ Completed").removeClass().addClass("badge bg-success status-badge");
-                    $("#stopBroadcast").prop("disabled", true);
-                    $("#startBroadcast").prop("disabled", false);
-                    setTimeout(() => location.reload(), 2000);
-                } else if (data.status === "stopped") {
-                    clearInterval(statusInterval);
-                    $("#stopBroadcast").prop("disabled", true);
-                    $("#startBroadcast").prop("disabled", false);
-                } else if (data.running) {
-                    $("#statusText").text("Running").removeClass().addClass("badge bg-success status-badge");
-                }
-            });
+            $.get('/broadcast-status')
+                .done(function(data) {
+                    $('#doneCount').text(data.done);
+                    $('#failCount').text(data.fail);
+                    $('#totalCount').text(data.total);
+                    
+                    const processed = data.done + data.fail;
+                    const pct = data.total > 0 ? Math.round((processed / data.total) * 100) : 0;
+                    
+                    $('#progressBar')
+                        .css('width', pct + '%')
+                        .text(pct + '%');
+                    
+                    $('#currentStatus').html(
+                        `<i class="bi bi-arrow-right-circle"></i> ` +
+                        `Processing: ${data.current}/${data.total} | ` +
+                        `Done: ${data.done} | Failed: ${data.fail}`
+                    );
+                    
+                    // Update status badge
+                    if (data.status === 'completed') {
+                        clearInterval(statusInterval);
+                        statusInterval = null;
+                        
+                        $('#statusText')
+                            .text('✅ Completed')
+                            .removeClass()
+                            .addClass('badge bg-success status-badge');
+                        
+                        $('#stopBroadcast').prop('disabled', true);
+                        $('#startBroadcast').prop('disabled', false);
+                        $('#currentStatus').html('<i class="bi bi-check-circle text-success"></i> Broadcast completed successfully');
+                        
+                        // Refresh page after 3 seconds to update history
+                        setTimeout(() => location.reload(), 3000);
+                        
+                    } else if (data.status === 'stopped') {
+                        clearInterval(statusInterval);
+                        statusInterval = null;
+                        
+                        $('#stopBroadcast').prop('disabled', true);
+                        $('#startBroadcast').prop('disabled', false);
+                        
+                    } else if (data.running) {
+                        $('#statusText')
+                            .text('Running')
+                            .removeClass()
+                            .addClass('badge bg-success status-badge');
+                    }
+                    
+                    // Update the stat boxes live
+                    $('#totalSent').text(data.done);
+                    $('#totalFailed').text(data.fail);
+                })
+                .fail(function() {
+                    console.error('Failed to poll status');
+                });
         }
     </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
