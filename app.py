@@ -17,7 +17,7 @@ import json
 import random
 import string
 from datetime import datetime
-from bson import ObjectId
+from bson.objectid import ObjectId
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24).hex())
