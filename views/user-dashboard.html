@@ -12,10 +12,11 @@
     .header h1 { font-size: 22px; }
     .header h1 span { color: #00ff88; }
     .logout { background: #ff4444; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; }
+    .logout:hover { background: #cc0000; }
     .card { background: #1a1a2e; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #2a2a4a; }
     .card h3 { color: #00ff88; margin-bottom: 16px; font-size: 16px; }
     .status-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #0f0f23; border-radius: 8px; margin-bottom: 16px; }
-    .status-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
     .status-dot.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
     .status-dot.disconnected { background: #ff4444; }
     .status-dot.qr_ready { background: #ffaa00; animation: pulse 1s infinite; }
@@ -23,16 +24,18 @@
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
     button { padding: 10px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.3s; }
     button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     .btn-primary { background: #00ff88; color: #000; width: 100%; padding: 14px; font-size: 16px; }
-    .btn-primary:disabled { background: #335544; cursor: not-allowed; transform: none; }
+    .btn-primary:disabled { background: #335544; }
     .btn-connect { background: #0066ff; color: #fff; }
     .btn-disconnect { background: #ff4444; color: #fff; }
     .btn-stop { background: #ff8800; color: #000; }
     .btn-secondary { background: #333; color: #fff; }
-    .target-msg { background: #0f0f23; padding: 16px; border-radius: 8px; border-left: 3px solid #00ff88; margin-bottom: 16px; font-size: 14px; line-height: 1.6; }
+    .target-msg { background: #0f0f23; padding: 16px; border-radius: 8px; border-left: 3px solid #00ff88; margin-bottom: 16px; font-size: 14px; line-height: 1.6; word-break: break-word; }
     .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 16px 0; }
     .stat-box { background: #0f0f23; padding: 16px; border-radius: 8px; text-align: center; }
     .stat-box .num { font-size: 28px; font-weight: 700; color: #00ff88; }
+    .stat-box .num.fail { color: #ff4444; }
     .stat-box .label { font-size: 12px; color: #888; margin-top: 4px; }
     .progress-bar { width: 100%; height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin: 12px 0; }
     .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #00cc6a); transition: width 0.3s; border-radius: 4px; }
@@ -41,13 +44,15 @@
     .log-area .entry.success { color: #00ff88; }
     .log-area .entry.fail { color: #ff4444; }
     .log-area .entry.info { color: #888; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     .qr-section { text-align: center; padding: 20px; }
     .qr-section img { width: 220px; height: 220px; border-radius: 12px; background: #fff; padding: 8px; }
     .qr-section p { color: #888; margin-top: 12px; font-size: 14px; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #222; font-size: 13px; }
     th { color: #00ff88; }
+    tr:hover { background: #111122; }
+    code { background: #222; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -71,6 +76,7 @@
       <div id="qrSection" class="qr-section hidden">
         <img id="qrImage" src="" alt="QR Code">
         <p>📱 Scan this QR code with WhatsApp on your phone</p>
+        <p style="color:#666;font-size:12px;margin-top:8px;">Open WhatsApp → Linked Devices → Link a Device</p>
       </div>
     </div>
 
@@ -83,8 +89,10 @@
     <!-- Broadcast Controls -->
     <div class="card">
       <h3>📤 Start Broadcasting</h3>
-      <p style="color:#888;margin-bottom:12px;font-size:13px;">Sends message to all numbers in <code>numbers.txt</code></p>
-      
+      <p style="color:#888;margin-bottom:12px;font-size:13px;">
+        Sends message to all numbers in <code>numbers.txt</code>
+      </p>
+
       <div class="stats">
         <div class="stat-box">
           <div class="num" id="statTotal">0</div>
@@ -95,7 +103,7 @@
           <div class="label">✅ Sent</div>
         </div>
         <div class="stat-box">
-          <div class="num" id="statFail" style="color:#ff4444;">0</div>
+          <div class="num fail" id="statFail">0</div>
           <div class="label">❌ Failed</div>
         </div>
       </div>
@@ -113,7 +121,7 @@
       </div>
     </div>
 
-    <!-- Live Log / History -->
+    <!-- Live Log -->
     <div class="card">
       <h3>📜 Broadcast Log</h3>
       <div id="liveLog" class="log-area">
@@ -121,30 +129,67 @@
       </div>
     </div>
 
+    <!-- History -->
     <div class="card">
       <h3>📊 History</h3>
       <table>
-        <thead><tr><th>Date</th><th>Total</th><th>✅</th><th>❌</th></tr></thead>
-        <tbody id="historyTable"><tr><td colspan="4" style="text-align:center;color:#888;">No history</td></tr></tbody>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Total</th>
+            <th>✅</th>
+            <th>❌</th>
+          </tr>
+        </thead>
+        <tbody id="historyTable">
+          <tr>
+            <td colspan="4" style="text-align:center;color:#888;">No history</td>
+          </tr>
+        </tbody>
       </table>
     </div>
   </div>
 
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <script>
+    // ============= AUTH CHECK =============
     const token = localStorage.getItem('token');
-    if (!token || localStorage.getItem('role') !== 'user') window.location.href = '/login.html';
+    if (!token || localStorage.getItem('role') !== 'user') {
+      window.location.href = '/login.html';
+    }
 
     document.getElementById('userName').textContent = localStorage.getItem('name') || 'User';
 
-    // Socket.IO
-    const socket = io({ auth: { token } });
+    // ============= SOCKET.IO =============
+    // Use relative URL so it works with any domain (reneshadow.online)
+    const socket = io({
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000
+    });
 
-    // ====== SOCKET EVENTS ======
+    socket.on('connect', () => {
+      console.log('✅ Socket connected');
+      addLog('🟢 Real-time connection established', 'success');
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('❌ Socket error:', err.message);
+      addLog('⚠️ Connection issue: ' + err.message, 'fail');
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      addLog('🔌 Disconnected from server (' + reason + ')', 'info');
+    });
+
     socket.on('qr_code', (data) => {
       document.getElementById('qrImage').src = data.qr;
       document.getElementById('qrSection').classList.remove('hidden');
-      updateStatus('qr_ready', 'Scan QR code with WhatsApp');
+      updateStatus('qr_ready', '📱 Scan QR Code');
+      addLog('📱 QR code generated — scan with WhatsApp', 'info');
     });
 
     socket.on('whatsapp_status', (data) => {
@@ -153,10 +198,12 @@
         updateStatus('connected', '✅ WhatsApp Connected');
         document.getElementById('connectBtn').classList.add('hidden');
         document.getElementById('disconnectBtn').classList.remove('hidden');
+        addLog('✅ WhatsApp connected successfully!', 'success');
       } else if (data.status === 'disconnected') {
         updateStatus('disconnected', '❌ Disconnected');
         document.getElementById('connectBtn').classList.remove('hidden');
         document.getElementById('disconnectBtn').classList.add('hidden');
+        addLog('❌ WhatsApp disconnected', 'fail');
       }
     });
 
@@ -164,51 +211,94 @@
       document.getElementById('statTotal').textContent = data.total;
       document.getElementById('statDone').textContent = data.success;
       document.getElementById('statFail').textContent = data.fail;
-      const pct = data.total > 0 ? Math.round(((data.success + data.fail) / data.total) * 100) : 0;
+
+      const done = data.success + data.fail;
+      const pct = data.total > 0 ? Math.round((done / data.total) * 100) : 0;
       document.getElementById('progressFill').style.width = pct + '%';
-      document.getElementById('progressText').textContent = `${data.done} / ${data.total}`;
-      addLog(`${data.current}. ✅ ${data.success} | ❌ ${data.fail}`, data.fail > 0 ? 'fail' : 'success');
+      document.getElementById('progressText').textContent = done + ' / ' + data.total;
+
+      addLog(
+        '📨 ' + data.current + ' | ✅ ' + data.success + ' ❌ ' + data.fail,
+        data.fail > 0 ? 'fail' : 'success'
+      );
     });
 
     socket.on('broadcast_complete', (data) => {
       document.getElementById('progressSection').classList.add('hidden');
       document.getElementById('startBtn').classList.remove('hidden');
-      document.getElementById('stopBtn').classList.add('hidden');
       document.getElementById('startBtn').disabled = false;
-      addLog(`✅ COMPLETE! Sent: ${data.success}, Failed: ${data.fail}`, 'success');
+      document.getElementById('startBtn').textContent = '🚀 Start Broadcast';
+      document.getElementById('stopBtn').classList.add('hidden');
+
+      addLog(
+        '✅ BROADCAST COMPLETE! Sent: ' + data.success + ', Failed: ' + data.fail,
+        'success'
+      );
       loadHistory();
     });
 
-    // ====== FUNCTIONS ======
+    // ============= UI FUNCTIONS =============
     function updateStatus(status, text) {
       const dot = document.getElementById('statusDot');
       dot.className = 'status-dot ' + status;
       document.getElementById('statusText').textContent = text;
     }
 
-    function addLog(msg, type = 'info') {
+    function addLog(msg, type) {
+      if (!type) type = 'info';
       const log = document.getElementById('liveLog');
       const entry = document.createElement('div');
       entry.className = 'entry ' + type;
-      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+      entry.textContent = '[' + time + '] ' + msg;
       log.appendChild(entry);
       log.scrollTop = log.scrollHeight;
     }
 
-    async function api(path, method = 'GET', body = null) {
-      const opts = { method, headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } };
-      if (body) opts.body = JSON.stringify(body);
-      const res = await fetch(path, opts);
-      return res.json();
+    function showToast(msg, isError) {
+      // Simple toast using log area
+      addLog(msg, isError ? 'fail' : 'success');
     }
 
+    // ============= API HELPER =============
+    async function api(path, method, body) {
+      if (!method) method = 'GET';
+      const opts = {
+        method: method,
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        }
+      };
+      if (body) opts.body = JSON.stringify(body);
+
+      try {
+        const res = await fetch(path, opts);
+        return await res.json();
+      } catch (err) {
+        console.error('API error:', err);
+        return { error: 'Network error — check your connection' };
+      }
+    }
+
+    // ============= WHATSAPP =============
     async function loadStatus() {
       const data = await api('/api/user/status');
+      if (data.error) {
+        updateStatus('disconnected', '❌ ' + data.error);
+        return;
+      }
+
       if (data.status === 'connected') {
         updateStatus('connected', '✅ WhatsApp Connected');
         document.getElementById('connectBtn').classList.add('hidden');
         document.getElementById('disconnectBtn').classList.remove('hidden');
-      } else if (data.status === 'disconnected') {
+      } else if (data.status === 'qr_ready') {
+        updateStatus('qr_ready', '📱 QR Ready — Scan to connect');
+        document.getElementById('connectBtn').classList.remove('hidden');
+        document.getElementById('disconnectBtn').classList.add('hidden');
+      } else {
         updateStatus('disconnected', '❌ Disconnected');
         document.getElementById('connectBtn').classList.remove('hidden');
         document.getElementById('disconnectBtn').classList.add('hidden');
@@ -216,80 +306,120 @@
     }
 
     async function connect() {
-      document.getElementById('connectBtn').disabled = true;
-      document.getElementById('connectBtn').textContent = 'Connecting...';
-      await api('/api/user/connect', 'POST');
+      const btn = document.getElementById('connectBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Connecting...';
       addLog('🔄 Initializing WhatsApp connection...', 'info');
-      setTimeout(() => { document.getElementById('connectBtn').disabled = false; document.getElementById('connectBtn').textContent = '🔗 Connect'; }, 2000);
+
+      const data = await api('/api/user/connect', 'POST');
+
+      if (data.error) {
+        addLog('❌ ' + data.error, 'fail');
+        btn.disabled = false;
+        btn.textContent = '🔗 Connect';
+      } else {
+        addLog('✅ Connection request sent — check for QR code', 'info');
+        // Don't re-enable immediately; QR event will come via socket
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = '🔗 Connect';
+        }, 5000);
+      }
     }
 
     async function disconnect() {
+      addLog('🔌 Disconnecting...', 'info');
       await api('/api/user/disconnect', 'POST');
       updateStatus('disconnected', '❌ Disconnected');
       document.getElementById('connectBtn').classList.remove('hidden');
+      document.getElementById('connectBtn').disabled = false;
+      document.getElementById('connectBtn').textContent = '🔗 Connect';
       document.getElementById('disconnectBtn').classList.add('hidden');
       addLog('🔌 Disconnected from WhatsApp', 'info');
     }
 
+    // ============= MESSAGE =============
     async function loadTargetMessage() {
       const data = await api('/api/user/target-message');
-      document.getElementById('targetMsg').textContent = data.targetMessage || 'No message set by admin yet.';
-      if (data.targetMessage) addLog('📝 Target message loaded');
+      if (data.targetMessage) {
+        document.getElementById('targetMsg').textContent = data.targetMessage;
+        addLog('📝 Target message loaded from admin', 'info');
+      } else {
+        document.getElementById('targetMsg').textContent = 'No message set by admin yet.';
+      }
     }
 
+    // ============= BROADCAST =============
     async function startBroadcast() {
-      document.getElementById('startBtn').disabled = true;
-      document.getElementById('startBtn').textContent = '⏳ Broadcasting...';
-      document.getElementById('progressSection').classList.remove('hidden');
-      document.getElementById('stopBtn').classList.remove('hidden');
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const progressSection = document.getElementById('progressSection');
+
+      startBtn.disabled = true;
+      startBtn.textContent = '⏳ Starting...';
+
+      // Reset stats
       document.getElementById('statTotal').textContent = '0';
       document.getElementById('statDone').textContent = '0';
       document.getElementById('statFail').textContent = '0';
       document.getElementById('progressFill').style.width = '0%';
       document.getElementById('progressText').textContent = '0 / 0';
-      
+      progressSection.classList.remove('hidden');
+      stopBtn.classList.remove('hidden');
+
+      addLog('🚀 Starting broadcast...', 'info');
+
       const data = await api('/api/user/start-broadcast', 'POST');
-      
-      if (data.error) {
-        addLog(`❌ ${data.error}`, 'fail');
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('startBtn').textContent = '🚀 Start Broadcast';
-        document.getElementById('progressSection').classList.add('hidden');
-        document.getElementById('stopBtn').classList.add('hidden');
+
+      if (data && data.error) {
+        addLog('❌ ' + data.error, 'fail');
+        startBtn.disabled = false;
+        startBtn.textContent = '🚀 Start Broadcast';
+        progressSection.classList.add('hidden');
+        stopBtn.classList.add('hidden');
       }
+      // If no error, broadcast_progress/completed socket events will handle UI
     }
 
     async function stopBroadcast() {
+      addLog('⏹ Stopping broadcast...', 'info');
       await api('/api/user/stop-broadcast', 'POST');
       addLog('⏹ Broadcast stopped by user', 'info');
+
       document.getElementById('startBtn').disabled = false;
       document.getElementById('startBtn').textContent = '🚀 Start Broadcast';
       document.getElementById('stopBtn').classList.add('hidden');
     }
 
+    // ============= HISTORY =============
     async function loadHistory() {
       const data = await api('/api/user/history');
       const tbody = document.getElementById('historyTable');
-      if (data.length === 0) {
+
+      if (!data || data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">No history</td></tr>';
         return;
       }
-      tbody.innerHTML = data.map(h => `
-        <tr>
-          <td>${h.createdAt ? new Date(h.createdAt).toLocaleString() : '-'}</td>
-          <td>${h.totalNumbers || 0}</td>
-          <td style="color:#00ff88;">${h.successCount || 0}</td>
-          <td style="color:#ff4444;">${h.failCount || 0}</td>
-        </tr>
-      `).join('');
+
+      tbody.innerHTML = data.map(function(h) {
+        const date = h.createdAt ? new Date(h.createdAt).toLocaleString() : '-';
+        return '<tr>' +
+          '<td>' + date + '</td>' +
+          '<td>' + (h.totalNumbers || 0) + '</td>' +
+          '<td style="color:#00ff88;">' + (h.successCount || 0) + '</td>' +
+          '<td style="color:#ff4444;">' + (h.failCount || 0) + '</td>' +
+        '</tr>';
+      }).join('');
     }
 
+    // ============= LOGOUT =============
     function logout() {
+      if (socket) socket.disconnect();
       localStorage.clear();
       window.location.href = '/login.html';
     }
 
-    // Init
+    // ============= INIT =============
     loadStatus();
     loadTargetMessage();
     loadHistory();
