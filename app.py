@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24).hex()
 
 # ─── MongoDB Connection ─────────────────────────────────────────
-MONGO_URI = "mongodb://localhost:27017"
+MONGO_URI = "mongodb+srv://nexacoders2_db_user:dxYh7QOdHvH6OVdd@cluster0.f4qxcbk.mongodb.net/?appName=Cluster0"
 client = MongoClient(MONGO_URI)
 db = client["whatsapp_spreader"]
 users_col = db["users"]          # Panel admin
